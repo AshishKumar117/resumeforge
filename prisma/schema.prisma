@@ -1,0 +1,263 @@
+// ResumeForge — Prisma schema (Prisma ORM 7)
+//
+// Uses PostgreSQL (production). For zero-friction local development you can
+// point DATABASE_URL at a local Postgres (e.g. via Docker) or a free Neon /
+// Supabase instance. Status fields are plain strings — see
+// src/lib/constants.ts for the canonical sets.
+
+// The datasource `url` lives in prisma.config.ts (Prisma 7 moved it there).
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+// ---------------------------------------------------------------------------
+// AUTH
+// ---------------------------------------------------------------------------
+
+model User {
+  id            String   @id @default(cuid())
+  name          String
+  email         String   @unique
+  emailVerified DateTime?
+  passwordHash  String?
+  image         String?
+  role          String   @default("USER") // USER | ADMIN
+
+  // Onboarding / personalization
+  targetRole      String?
+  industry        String?
+  experienceLevel String? // ENTRY | JUNIOR | MID | SENIOR | LEAD | EXECUTIVE
+  aiTone          String? // PROFESSIONAL | CONCISE | CONFIDENTIAL | FRIENDLY
+
+  plan            String? @default("FREE") // FREE | PRO
+  stripeCustomerId String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  accounts          Account[]
+  sessions          Session[]
+  resumes           Resume[]
+  coverLetters      CoverLetter[]
+  jobApplications   JobApplication[]
+  verificationTokens VerificationToken[]
+  aiUsage           AiUsage[]
+  subscription      Subscription?
+
+  @@map("User")
+}
+
+model Account {
+  id                String   @id @default(cuid())
+  userId            String
+  provider          String // "google" | "github"
+  providerAccountId String
+  accessToken       String?
+  refreshToken      String?
+  tokenType         String?
+  scope             String?
+  expiresAt         DateTime?
+  createdAt         DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("Account")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  sessionToken String   @unique
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("Session")
+}
+
+model VerificationToken {
+  id        String   @id @default(cuid())
+  identifier String  // email address
+  token     String   // hashed token value
+  type      String   // VERIFY_EMAIL | RESET_PASSWORD
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [identifier], references: [email], onDelete: Cascade)
+
+  @@index([identifier, type])
+  @@index([token])
+  @@map("VerificationToken")
+}
+
+// ---------------------------------------------------------------------------
+// PRODUCT
+// ---------------------------------------------------------------------------
+
+model Resume {
+  id            String   @id @default(cuid())
+  userId        String
+  title         String
+  slug          String   @unique // deterministic share slug
+  template      String   @default("modern") // key in template registry
+  accentColor   String   @default("#2563eb")
+  font          String   @default("Inter")
+  data          Json // ResumeData
+  targetRole    String?
+  targetJobDescription String?
+  aiScore       Int?
+  status        String   @default("DRAFT") // DRAFT | COMPLETE
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  versions ResumeVersion[]
+  jobApplications JobApplication[]
+  coverLetters CoverLetter[]
+  shareLink ShareLink?
+
+  @@index([userId])
+  @@map("Resume")
+}
+
+model ResumeVersion {
+  id        String   @id @default(cuid())
+  resumeId  String
+  version   Int
+  data      Json
+  createdAt DateTime @default(now())
+
+  resume Resume @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+
+  @@unique([resumeId, version])
+  @@index([resumeId])
+  @@map("ResumeVersion")
+}
+
+model CoverLetter {
+  id        String   @id @default(cuid())
+  userId    String
+  resumeId  String?
+  title     String
+  content   String
+  targetCompany String?
+  targetRole String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resume Resume? @relation(fields: [resumeId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@map("CoverLetter")
+}
+
+model JobApplication {
+  id        String   @id @default(cuid())
+  userId    String
+  resumeId  String?
+  company   String
+  role      String
+  location  String?
+  url       String?
+  status    String   @default("APPLIED") // APPLIED | INTERVIEW | OFFER | REJECTED | WITHDRAWN
+  notes     String?
+  appliedAt DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resume Resume? @relation(fields: [resumeId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@map("JobApplication")
+}
+
+model ShareLink {
+  id           String    @id @default(cuid())
+  resumeId     String    @unique
+  slug         String    @unique
+  viewCount    Int       @default(0)
+  lastViewedAt DateTime?
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+
+  resume Resume @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+  views ShareView[]
+
+  @@index([resumeId])
+  @@map("ShareLink")
+}
+
+model ShareView {
+  id         String   @id @default(cuid())
+  shareLinkId String
+  viewedAt   DateTime @default(now())
+  referrer   String?
+  country    String?
+
+  shareLink ShareLink @relation(fields: [shareLinkId], references: [id], onDelete: Cascade)
+
+  @@index([shareLinkId])
+  @@map("ShareView")
+}
+
+model AiUsage {
+  id            String   @id @default(cuid())
+  userId        String
+  feature       String // IMPROVE_BULLET | SUMMARY | COVER_LETTER | ATS_ANALYZE | IMPORT
+  model         String?
+  promptTokens  Int     @default(0)
+  completionTokens Int @default(0)
+  cached        Boolean @default(false)
+  createdAt     DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("AiUsage")
+}
+
+model Subscription {
+  id                 String    @id @default(cuid())
+  userId             String    @unique
+  stripeCustomerId   String?
+  stripeSubscriptionId String? @unique
+  stripePriceId      String?
+  plan               String    @default("FREE")
+  status             String    @default("INACTIVE") // ACTIVE | PAST_DUE | CANCELED | TRIALING
+  currentPeriodEnd   DateTime?
+  cancelAtPeriodEnd  Boolean   @default(false)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("Subscription")
+}
+
+model Template {
+  id           String   @id @default(cuid())
+  slug         String   @unique
+  name         String
+  description  String
+  category     String   @default("BASIC") // BASIC | PRO
+  thumbnailUrl String?
+  accentColors Json
+  fonts        Json
+  isActive     Boolean  @default(true)
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  @@map("Template")
+}

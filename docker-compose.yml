@@ -1,0 +1,41 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: resumeforge
+      POSTGRES_PASSWORD: resumeforge
+      POSTGRES_DB: resumeforge
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        DATABASE_URL: postgresql://resumeforge:resumeforge@db:5432/resumeforge?schema=public
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://resumeforge:resumeforge@db:5432/resumeforge?schema=public
+      AUTH_SECRET: change-me-in-production
+      APP_URL: http://localhost:3000
+    depends_on:
+      - db
+      - redis
+    command: sh -c "npx prisma db push && npm run start"
+
+volumes:
+  pgdata:
+  redisdata:
