@@ -29,6 +29,9 @@ import {
 
 interface AppSidebarProps {
   user: { name: string; email: string; plan: string | null };
+  desktopCollapsed: boolean;
+  onCollapse: () => void;
+  onExpand: () => void;
 }
 
 const NAV = [
@@ -38,9 +41,9 @@ const NAV = [
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
-export function AppSidebar({ user }: AppSidebarProps) {
+export function AppSidebar({ user, desktopCollapsed, onCollapse, onExpand }: AppSidebarProps) {
   const pathname = usePathname();
-  const [open, setOpen] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   const initials = user.name
     .split(" ")
@@ -48,6 +51,11 @@ export function AppSidebar({ user }: AppSidebarProps) {
     .slice(0, 2)
     .join("")
     .toUpperCase();
+
+  const closeSidebar = () => {
+    setMobileOpen(false);
+    onCollapse();
+  };
 
   const content = (
     <>
@@ -60,14 +68,15 @@ export function AppSidebar({ user }: AppSidebarProps) {
         </Link>
         <button
           type="button"
-          className="rounded-md p-1.5 text-muted-foreground hover:bg-accent lg:hidden"
-          onClick={() => setOpen(false)}
+          className="rounded-md p-1.5 text-muted-foreground hover:bg-accent"
+          onClick={closeSidebar}
+          aria-label="Close sidebar"
         >
           <X className="h-4 w-4" />
         </button>
       </div>
       <nav className="flex-1 space-y-1 px-3 py-4">
-        <Button asChild variant="default" className="w-full justify-start" onClick={() => setOpen(false)}>
+        <Button asChild variant="default" className="w-full justify-start" onClick={closeSidebar}>
           <Link href="/resume/new">
             <FilePlus2 className="h-4 w-4" />
             New resume
@@ -79,7 +88,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
             <Link
               key={item.href}
               href={item.href}
-              onClick={() => setOpen(false)}
+              onClick={closeSidebar}
               className={cn(
                 "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                 active ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground",
@@ -132,15 +141,32 @@ export function AppSidebar({ user }: AppSidebarProps) {
 
   return (
     <>
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r bg-background lg:flex">
+      <aside
+        className={cn(
+          "fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r bg-background transition-transform",
+          desktopCollapsed ? "lg:hidden" : "lg:flex",
+        )}
+      >
         {content}
       </aside>
+
+      {desktopCollapsed && (
+        <button
+          type="button"
+          className="fixed left-4 top-4 z-40 hidden h-9 w-9 items-center justify-center rounded-md border bg-background text-muted-foreground hover:bg-accent hover:text-foreground lg:inline-flex"
+          onClick={onExpand}
+          aria-label="Open sidebar"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+      )}
 
       <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b bg-background/80 px-4 backdrop-blur lg:hidden">
         <button
           type="button"
           className="rounded-md p-1.5 text-muted-foreground hover:bg-accent"
-          onClick={() => setOpen(true)}
+          onClick={() => setMobileOpen(true)}
+          aria-label="Open menu"
         >
           <Menu className="h-5 w-5" />
         </button>
@@ -153,12 +179,12 @@ export function AppSidebar({ user }: AppSidebarProps) {
         <ThemeToggle />
       </header>
 
-      {open && (
+      {mobileOpen && (
         <div className="fixed inset-0 z-40 flex lg:hidden">
           <div className="w-72 border-r bg-background" role="dialog" aria-label="Navigation">
             {content}
           </div>
-          <div className="flex-1 bg-black/40" onClick={() => setOpen(false)} />
+          <div className="flex-1 bg-black/40" onClick={() => setMobileOpen(false)} />
         </div>
       )}
     </>
